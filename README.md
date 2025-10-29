@@ -1,4 +1,4 @@
-# Scientific Python Course (2024)
+# Scientific Python Course (2025)
 
 1. Jupyter
 2. Numpy
@@ -27,7 +27,7 @@ To create a python environment (to do only once)
 	python3 -m venv Scientific_Python
 	cd Scientific_Python
 	source bin/activate
-	git clone https://gitlab.pasteur.fr/hub-courses/scientific_python.git Scientific_Python_Course
+	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git  Scientific_Python_Course
 	cd Scientific_Python_Course
 	python -m pip install -r requirements.txt
 
@@ -55,7 +55,7 @@ Then create your environement (to do only once)
 	conda activate Scientific_Python
 
 	# get the course materials
-	git clone https://gitlab.pasteur.fr/hub-courses/scientific_python.git Scientific_Python_Course
+	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git Scientific_Python_Course
     cd Scientific_Python_Course
 
 	# install prerequisites
@@ -71,6 +71,4 @@ To reactivate the environment
 
 	# to run jupyter notebook server
 	jupyter-lab
-
-
 
