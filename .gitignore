@@ -1,0 +1,48 @@
+.eggs
+
+######################
+# Logs and databases #
+######################
+*\.log
+.DS_Store
+
+####################
+# Eclipse metadata_path #
+####################
+\.project
+\.pydevproject
+\.settings/
+
+#############
+# vim files #
+#############
+*\.swp
+*~
+\#*\#
+
+################# 
+# pycharm files #
+#################
+\.idea
+
+##########################
+# Python complied source #
+##########################
+*\.pyc
+*\.pyo
+
+####################### 
+# notebook checkpoint #
+#######################
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+##########
+# vscode #
+##########
+**/.vscode/
+
+##########################################################
+# notebooks must be force-added to avoid pushing re-runs #
+##########################################################
+*.ipynb
