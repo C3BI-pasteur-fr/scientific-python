@@ -10,3 +10,4 @@ ipywidgets
 pingouin
 formulaic
 plotly
+umap-learn
