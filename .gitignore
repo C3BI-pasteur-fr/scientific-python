@@ -46,3 +46,5 @@
 # notebooks must be force-added to avoid pushing re-runs #
 ##########################################################
 *.ipynb
+.Rproj.user
+*.Rproj
