@@ -3,11 +3,10 @@
 1. Jupyter
 2. Numpy
 3. Pandas
-5. Seaborn/Matplotlib
-6. Scipy/Pingouin
+5. Seaborn
+6. Scipy
 7. Statsmodels
 8. Scikit-learn
-9. Interactivity intro
 
 ## Materials requirements
 
@@ -29,7 +28,7 @@ To create a python environment (to do only once)
 	source bin/activate
 	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git  Scientific_Python_Course
 	cd Scientific_Python_Course
-	python -m pip install -r requirements.txt
+	pip install -r requirements.txt
 
 To exit from the environment
 
