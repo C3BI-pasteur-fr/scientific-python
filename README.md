@@ -21,13 +21,16 @@ But whatever your choice you need to have git installed to get the course materi
 
 ### from virtual environment
 
+**Warning** do **NOT** use python 3.14 
+
 To create a python environment (to do only once)
 
 	python3 -m venv Scientific_Python
 	cd Scientific_Python
 	source bin/activate
-	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git  Scientific_Python_Course
-	cd Scientific_Python_Course
+	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git  Scientific_Python_ori
+    cp -r Scientific_Python_ori My_course
+	cd My_course
 	pip install -r requirements.txt
 
 To exit from the environment
@@ -54,8 +57,9 @@ Then create your environement (to do only once)
 	conda activate Scientific_Python
 
 	# get the course materials
-	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git Scientific_Python_Course
-    cd Scientific_Python_Course
+	git clone https://github.com/C3BI-pasteur-fr/scientific-python.git Scientific_Python_ori
+    cp -r Scientific_Python_Course_ori  My_course
+    cd My_course
 
 	# install prerequisites
     mamba install --file requirements.txt
