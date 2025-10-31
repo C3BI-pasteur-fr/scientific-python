@@ -48,3 +48,4 @@
 *.ipynb
 .Rproj.user
 *.Rproj
+.Rhistory
