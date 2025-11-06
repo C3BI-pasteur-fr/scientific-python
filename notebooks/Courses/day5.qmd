@@ -1,0 +1,720 @@
+---
+title: "Day 5 preparation"
+format:
+  html:
+    toc: true
+    code-fold: show
+    code-tools: true
+    df-print: paged
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+  freeze: auto
+---
+
+I present here a combination of all the exercises of the last day, as well as a short summary of the methods we will see together. I decided to present, in this document, side by side, R and Python.
+
+# Introduction
+
+## Packages
+
+First, we load all the packages and functions that we need for today. Notice that Python has a more refined arsenal of methods to import methods from packages. It's possible to use similar methods in R, but it's definitely not standard.
+
+Below is a comparative table with what those packages do in R and Python.
+
+Theme | R package(s) | Python package(s)
+---|---|---
+Data manipulation | `dplyr` | `pandas`
+Plotting | `ggplot2` | `seaborn`
+Distances | `base` | `sklearn`
+Clustering | `stats` | `scipy`
+PCA | `FactoMineR`, `factoextra` | `sklearn`
+UMAP | `umap` | `umap-learn`
+Silhouette coefficient | `cluster` | `sklearn`
+Rand index | `fossil` |  `sklearn`
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r setup
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(cluster)
+library(FactoMineR)
+library(factoextra)
+library(fossil)
+library(ggplot2)
+library(readr)
+library(umap)
+
+theme_set(theme_bw())
+```
+
+### Python
+
+```{python}
+#| label: python setup
+
+## Packages
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import pairwise_distances
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from scipy.cluster.hierarchy import linkage, dendrogram
+import umap
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.metrics import rand_score
+
+```
+
+```{python}
+#| label: python custom functions
+
+## Custom functions are defined here
+
+def plot_correlation_circle(pca, feature_names, dims=(1, 2), ax=None):
+    """
+    Plot correlation circle for given PCA object.
+    
+    pca : fitted sklearn.decomposition.PCA
+    feature_names : list of variable names (columns of X)
+    dims : tuple of components to plot (1-based indices), e.g. (1, 2)
+    ax : optional matplotlib Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6))
+    
+    d1, d2 = dims[0] - 1, dims[1] - 1   # convert to 0-based
+    
+    # Loadings (components) shape: (n_components, n_features)
+    # Correlation between variables and components for standardized X:
+    # corr = loadings * sqrt(eigenvalues)
+    loadings = pca.components_
+    eigvals = pca.explained_variance_
+    
+    xs = loadings[d1, :] * np.sqrt(eigvals[d1])
+    ys = loadings[d2, :] * np.sqrt(eigvals[d2])
+
+    # Draw arrows
+    for i, (x, y) in enumerate(zip(xs, ys)):
+        ax.arrow(0, 0, x, y,
+                 head_width=0.02, head_length=0.02, length_includes_head=True)
+        ax.text(x * 1.05, y * 1.05, feature_names[i],
+                ha='center', va='center')
+
+    # Unit circle
+    circle = plt.Circle((0, 0), 1, facecolor='none', edgecolor='black', linestyle='--')
+    ax.add_artist(circle)
+
+    # Axes formatting
+    ax.set_xlabel(f"PC{dims[0]}")
+    ax.set_ylabel(f"PC{dims[1]}")
+    ax.axhline(0, linewidth=0.5)
+    ax.axvline(0, linewidth=0.5)
+    ax.set_xlim(-1.1, 1.1)
+    ax.set_ylim(-1.1, 1.1)
+    ax.set_aspect('equal', 'box')
+    ax.set_title("Correlation circle")
+    
+    return ax
+
+```
+:::
+
+## Data
+
+The example data I created for this morning is completely random. It's in a file called 'day5_example.csv'. Take a look at the data in your favorite spreadsheet software. Then, load them in your environment.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r read data
+dat <- read_delim("../data/day5_example.csv")
+```
+
+### Python
+
+```{python}
+#| label: python read data
+dat = pd.read_csv("../data/day5_example.csv")
+```
+:::
+
+Then, explore them with a quick "describe" function. Depending on the software you are using, you will even get more options to see what's in there.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r glimpse
+glimpse(dat)
+```
+
+### Python
+
+```{python}
+#| label: python glimpse
+dat.describe(include='all')
+```
+:::
+
+From this quick exploration, we see that this data contains:
+
+-   $n = 100$ observations on two groups of $50$ individuals (A and B),
+-   $p = 3$ variables (gene expression values) called Gene1, Gene2, and Gene3.
+
+
+# 1. Distances
+
+
+A distance is a mathematical function that takes two inputs of the same space and return a positive real. It you like to speak Math, this sentence translates to the following formula:
+
+$$
+\begin{eqnarray}
+  d : \mathbb{R}^\delta \times \mathbb{R}^\delta \rightarrow \mathbb{R}^+ \\
+  (x, y) \mapsto d(x, y)
+\end{eqnarray}
+$$
+
+Here I used the symbol $\delta$ to denote the dimension of the space. It's not meant to confuse: I used $\delta$ because it could either be equal to the number of observations (denoted by $n$) or the number of observations (denoted by $p$). Here comes the confusing part:
+
+-   if I want to compute the distance between observations, then the origin space is $\mathbb{R}^p$, because an observation lives in a $p$-dimensional space;
+-   if I want to compute the distance between two variables, then the origin space is $\mathbb{R}^n$, because a variable lives in an $n$-dimensional space.
+
+In the slides, I told you that a distance function satisfies these three properties:
+
+1.  $d(x, y) = 0 \Leftrightarrow x=y$
+2.  $d(x, y) = d(y, x)$
+3.  $d(x, z) \leq d(x, y) + d(y, z)$
+
+
+Compute the distance between all observations. The result should be a $100 \times 100$ distance matrix. Use the Euclidean distance.
+
+Reminder: the formula for the Euclidean distance between observation $x$ and $y$ is
+
+$$
+  d(x, y) = \sqrt{ \sum_{j = 1}^p (x_j - y_j)^2}.
+$$
+
+Below are the first 5 rows and columns of the result.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r distance obs
+D <- dist(dat[, -1])
+as.matrix(D)[1:5, 1:5]
+```
+
+### Python
+
+```{python}
+#| label: python distance obs
+D = pairwise_distances(dat.iloc[:,1:], metric='euclidean')
+D[0:5, 0:5]
+```
+:::
+
+Represent this distance matrix as a heatmap. You should clearly see two "blocks" of observations.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r distance heatmap
+pheatmap::pheatmap(
+    mat = D, 
+    cluster_rows = FALSE, cluster_cols = FALSE, 
+    show_rownames = FALSE, show_colnames = FALSE, 
+    cellwidth = 2, cellheight = 2,
+    border_color = NA)
+```
+
+### Python
+
+```{python}
+#| label: python distance heatmap
+plt.figure(figsize=(6, 6))  # augmente pour agrandir les cellules
+sns.heatmap(
+    D,
+    cmap="viridis",
+    xticklabels=False,
+    yticklabels=False,
+    cbar=True,
+    linewidths=0
+)
+plt.show()
+
+```
+:::
+
+Now compute the correlation based distance between the 3 quantitative variables. By definition, the "correlation distance" is computed with the formula 
+
+$$
+1 - \operatorname{cor}(x,y).
+$$
+
+With this definition, we ensure that
+
+-   the result is always positive, because correlation is always between -1 and 1
+-   it's symmetric,
+-   when it's equal to $0$, it means that $\operatorname{cor}(x,y) = 1$, so $x = y$... but only if scale is not important!
+-   ... but it's a fail for the triangular inequality.
+
+So this so-called distance is in fact a **dissimilarity** (i.e. a distance without the triangular inequality property).
+
+You should obtain a $3 \times 3$ matrix with values ranging from 0, for pairs of variables that are perfectly correlated, to 2 ,for pairs of variables that are perfectly anti-correlated.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r correlation based distance
+pheatmap::pheatmap(
+  mat = 1 - cor(dat[,-1]), 
+  cellwidth = 50, cellheight = 50, 
+  cluster_rows = FALSE, cluster_cols = FALSE, 
+  display_numbers = TRUE, number_color = "white")
+```
+
+### Python
+
+```{python}
+#| label: python correlation based distance
+plt.figure(figsize=(3, 3))  # resize the figure if necessary
+sns.heatmap(
+    pairwise_distances(dat.iloc[:,1:].T, metric='correlation'),
+    cmap="viridis",
+    xticklabels=False,
+    yticklabels=False,
+    cbar=True,annot=True,
+    linewidths=0
+)
+plt.show()
+
+
+```
+:::
+
+# 2. Principal Component Analysis
+
+The version of Principal Component Analysis that we saw together decomposes the correlation matrix into principal components that are linear combinations of standardized variables.
+
+First, standardization is the operation that removes the mean (aka "centers" the data) and divides by its standard deviation each variable (aka "scales" the data). The mathematical formula for this operation for variable $x_j$ with mean $m_j$ and standard-deviation $s_j$ is the following 
+
+$$
+  \frac{x_j - m_j}{s_j}
+$$
+
+During the `numpy` part of the class, you learnt how to perform this operation with `numpy` functions. You can also use `scikit-learn` to do it!
+
+And, as usual in R, there are shortcuts to perform scaled PCA without having to actually standardize the data.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r pca
+
+res_pca <- PCA(dat[,-1], graph = FALSE)
+fviz_screeplot(res_pca)
+fviz_pca_ind(res_pca, col.ind = dat$group)
+fviz_pca_var(res_pca, repel = TRUE)
+```
+
+### Python
+
+```{python}
+#| label: python pca
+# First column = group / label
+y = dat.iloc[:, 0]           # labels (for colors)
+X = dat.iloc[:, 1:]          # only quantitative variables
+
+# 1) Standardize
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# 2) PCA on scaled data
+pca = PCA()
+X_pca = pca.fit_transform(X_scaled)   # scores
+
+expl_var_ratio = pca.explained_variance_ratio_ * 100  # in %
+
+plt.figure(figsize=(6, 4))
+plt.bar(range(1, len(expl_var_ratio) + 1), expl_var_ratio)
+plt.xlabel("Principal component")
+plt.ylabel("Explained variance (%)")
+plt.title("Scree plot")
+plt.xticks(range(1, len(expl_var_ratio) + 1))
+plt.tight_layout()
+plt.show()
+
+
+scores = pd.DataFrame(
+    X_pca[:, 0:2],        # first two components
+    columns=["PC1", "PC2"]
+)
+scores["group"] = y      # add label
+
+plt.figure(figsize=(6, 6))
+sns.scatterplot(
+    data=scores,
+    x="PC1",
+    y="PC2",
+    hue="group",
+    s=60
+)
+plt.axhline(0, linewidth=0.5)
+plt.axvline(0, linewidth=0.5)
+plt.title("Individuals factor map (PC1 vs PC2)")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+feature_names = X.columns.tolist()
+
+plot_correlation_circle(pca, feature_names, dims=(1, 2))
+plt.tight_layout()
+plt.show()
+```
+:::
+
+# 3. UMAP
+
+When using UMAP, one has to be very careful when setting the values for the parameters. I selected a few parameters below, but used more in my script. Those I selected are the ones that you should be mindful about when using UMAP. Consult the documentation to know more (https://umap-learn.readthedocs.io/en/latest/api.html).
+
+| Parameter | Description | Default | Importance |
+|------------------|------------------|------------------|------------------|
+| `random_state` | Random seed used for reproducibility. | None | High |
+| `metric` | Distance metric used to compute the nearest neighbors | "euclidean" | Very high |
+| `n_neighbors` | Number of nearest neighbors considered for each object | 15 | Very high |
+| `min_dist` | Controls how close the objects will be in the low dimensional space | 0.1 | Very high |
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r umap
+ 
+custom.config <- umap.defaults
+custom.config$random_state <- 527
+custom.config$metric <- "euclidean"
+custom.config$n_neighbors <- 10
+custom.config$negative_sample_rate <- 10
+custom.config$min_dist <- 0.05
+custom.config$spread <- 1
+custom.config$alpha <- 10
+custom.config$gamma <- 10
+custom.config$knn.repeat <- 100
+
+res_umap <- umap(
+  d = dat[, -1],
+  method = "umap-learn",
+  config = custom.config)
+
+dat.umap <- tibble(
+  UMAP1 = res_umap$layout[, 1],
+  UMAP2 = res_umap$layout[, 2],
+  group = dat$group
+)
+
+dat.umap %>%
+  ggplot(aes(UMAP1, UMAP2, color = group)) + 
+  geom_point() + 
+  coord_equal()
+
+```
+
+### Python
+
+```{python}
+#| label: python umap
+
+X = dat.iloc[:, 1:]
+group = dat.iloc[:, 0]
+
+umap_model = umap.UMAP(
+    random_state=527,
+    metric="euclidean",
+    n_neighbors=10,
+    negative_sample_rate=10,
+    min_dist=0.05,
+    spread=1.0,
+    learning_rate=10.0,        # ≈ alpha in R config
+    repulsion_strength=10.0,   # ≈ gamma in R config
+    # no direct equivalent for knn.repeat in umap-learn
+)
+
+embedding = umap_model.fit_transform(X.values)
+
+# Build a DataFrame with the result
+dat_umap = pd.DataFrame({
+    "UMAP1": embedding[:, 0],
+    "UMAP2": embedding[:, 1],
+    "group": group
+})
+
+fig, ax = plt.subplots(figsize=(6, 5))
+sns.scatterplot(
+    data=dat_umap,
+    x="UMAP1",
+    y="UMAP2",
+    hue="group",
+    s=40,
+    ax=ax
+)
+ax.set_aspect("equal", "box")   # coord_equal()
+ax.set_title("UMAP projection")
+plt.tight_layout()
+plt.show()
+
+```
+:::
+
+# 4. Hierarchical Clustering
+
+Clustering is meant to create groups of objects, or more precisely, create a partition. It means that each object will belong to **exactly** one group.
+
+Hierarchical clustering has several variants, we saw the most common, where you start from each object defining their own group (there are as many groups as objects) and we work our way up to a partition containing all the objects based on
+
+-   a distance or a dissimilarity matrix,
+-   a method to agglomerate several objects into clusters.
+
+Compute the HC of the observations based on a Euclidean distance and Ward's agglomeration method.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r hclust
+
+res_hc <- hclust(dist(dat[, -1]), method = "ward.D2")
+opar <- par(mar = c(0, 4, 2, 0))
+plot(res_hc, hang = -1, label = FALSE, xlab = "", sub = "")
+par(opar)
+```
+
+### Python
+
+```{python}
+#| label: python hclust
+
+plt.figure(figsize=(8, 4))
+dendrogram(
+    linkage(dat.iloc[:, 1:], method="ward"),
+    no_labels=True,
+)
+plt.ylabel("Height")
+plt.show()
+```
+:::
+
+There are two obvious clusters of observations, and Python is nice enough to highlight them (by default, you don't need to do anything).
+
+If you remember UMAP, you might intuitively realize that it's not very reasonable to use hierarchical clustering on a distance matrix computed on UMAP. What we use is typically $k$-means.
+
+# 5. $k$-means
+
+This method is very straightforward to understand: iteratively, you move the position of your centroids based on their dispersion, and end up (most likely in a local minimum) with a stable solution of a partition with as many groups as you asked. Since the initialization is random, each time $k$-means is re-run, the solution will be different. So the implementations that you have of this method in both R and Python will repeat the procedure several times, and compute the consensus between several solutions. There is a whole field of literature on $k$-means and their variations.
+
+We can run the algorithm on the full dataset. Because it's very low dimensional, it makes a lot of sense to not bother with a dimension reduction technique such as PCA or UMAP. The result is shown below for $k = 2$.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r kmeans
+res_kmeans <- kmeans(dat[, -1], centers = 2, nstart = 100)
+table(res_kmeans$cluster, dat$group)
+```
+
+### Python
+
+```{python}
+#| label: python kmeans
+res_kmeans = KMeans(
+    n_clusters=2,
+    n_init=100).fit(dat.iloc[:, 1:])
+print(pd.crosstab(res_kmeans.labels_, dat.loc[:, 'group']))
+```
+:::
+
+Now we also run this script on the two first UMAP dimensions. It would make sense to do that if we had a dataset with a lot of variables that would be hard to explore: in this case, to get clusters of observations, we would first run UMAP and then $k$-means on the UMAP dimensions. Here the results with or without dimension reduction with UMAP are the same (see below).
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r kmeans umap
+res_kmeans_umap <- kmeans(res_umap$layout, centers = 2, nstart = 100)
+table(res_kmeans_umap$cluster, res_kmeans$cluster)
+```
+
+### Python
+
+```{python}
+#| label: python kmeans umap
+res_kmeans_umap = KMeans(
+    n_clusters=2,
+    n_init=100).fit(embedding)
+print(pd.crosstab(res_kmeans_umap.labels_, res_kmeans.labels_))
+```
+:::
+
+# 6. Silhouette
+
+The silhouette coefficient is a great index to explore quantitatively your clustering. It works on a partition (each object is put in a cluster) and works on computing the mean distance of an object $i$ to its own cluster, denoted by $a(i)$, and the mean of the distances to the other clusters, denoted by $b(i)$, then the coefficient is computed as 
+$$
+  \text{sil}(i) = \frac{b(i) - a(i)}{max\left\{ a(i), b(i)\right\}}.
+$$
+
+Since we want an object to be far away from the other clusters, and to be close to the other objects of its cluster,
+
+-   $\text{sil}(i) \approx 1$ means that the cluster is comfortable in its own cluster ,
+-   $\text{sil}(i) \approx -1$ means that it is very unhappy to belong to the cluster it was assigned to,
+-   $\text{sil}(i) \approx 0$ means that object $i$ is likely to be in-between clusters.
+
+Below, we compute all the silhouette coefficients for the observations in our simulated example for $k = 2$, and we compute the **mean** silhouette coefficient for several values of $k$, and represent them as a line plot with $k$ on the horizontal axis and the mean silhouette on the vertical axis.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r silhouette
+
+res_sil <- cluster::silhouette(res_kmeans$cluster, D)
+
+as_tibble(res_sil) %>%
+  arrange(cluster, sil_width) %>%
+  mutate(index = 1:n()) %>%
+  ggplot(aes(x = index, y = sil_width, fill = factor(cluster))) +
+  geom_col() + 
+  labs(x = "", y = "Silhouette coefficient", fill = "k-means\nCluster")
+
+res_sil_allk <- 
+  tibble(
+    k = 2:5,
+    sil = sapply(2:5, \(k) 
+      mean(
+        silhouette(
+          kmeans(dat[,-1], k)$cluster, 
+          D)[,3])
+    )
+  )
+
+
+res_sil_allk %>%
+  ggplot(aes(k, sil)) + 
+  geom_line() + geom_point()
+
+```
+
+### Python
+
+```{python}
+#| label: python silhouette
+
+kmeans = KMeans(n_clusters=2, n_init=100, random_state=42).fit(X)
+labels = kmeans.labels_
+
+# Silhouette values for each observation
+sil_values = silhouette_samples(D, labels, metric='precomputed')  # since D is a distance matrix
+# alternatively: silhouette_samples(X, labels) if you want to recompute distances
+
+# Create a DataFrame equivalent to as_tibble(res_sil)
+res_sil = pd.DataFrame({
+    "cluster": labels,
+    "sil_width": sil_values
+})
+
+# Sort like in R: arrange(cluster, sil_width)
+res_sil = res_sil.sort_values(by=["cluster", "sil_width"]).reset_index(drop=True)
+res_sil["index"] = np.arange(1, len(res_sil) + 1)
+
+plt.figure(figsize=(8, 4))
+sns.barplot(
+    data=res_sil,
+    x="index",
+    y="sil_width",
+    hue=res_sil["cluster"].astype(str),
+    dodge=False
+)
+plt.xlabel("")
+plt.ylabel("Silhouette coefficient")
+plt.legend(title="k-means\nCluster")
+plt.show()
+
+plt.figure(figsize=(4, 4))
+
+k_values = range(2, 6)
+mean_sil = []
+
+for k in k_values:
+    kmeans = KMeans(n_clusters=k, n_init=100, random_state=42).fit(X)
+    labels = kmeans.labels_
+    sil = silhouette_score(D, labels, metric='precomputed')
+    mean_sil.append(sil)
+
+res_sil_allk = pd.DataFrame({"k": k_values, "sil": mean_sil})
+
+sns.lineplot(data=res_sil_allk, x="k", y="sil", marker="o")
+plt.xlabel("Number of clusters (k)")
+plt.ylabel("Mean silhouette coefficient")
+plt.title("Average silhouette width vs number of clusters")
+plt.show()
+
+```
+:::
+
+Based on the values of the mean silhouette coefficients that I computed for several values ok $k$ that there are 2 clusters of observations.
+
+# 7. Rand index
+
+Finally, the last tool in our unsupervised analysis toolbox is the Rand Index: it is used to assess the similarity between two partitions. It is based on the computations of four numbers :
+
+-   $a$, the number of **pairs** of objects that are clustered *together* in both partitions,
+-   $b$, the number of **pairs** of objects that are clustered together in the first, but not the second,
+-   $c$, the number of **pairs** of objects that are not together in the first, but are clustered together in the second,
+-   $d$, the number of **pairs** of objects that are not clustered together in both partitions.
+
+Then, the Rand Index assessing the similarity between the two given partitions is computed as 
+
+$$
+  \text{RI} = \frac{a + d}{a+b+c+d}.
+$$
+
+In other words, Rand Index measures how much two partitions have the same structure, i.e. if they put together or separate the same objects. Therefore, the closer it is to 1, the higher the similarity between the given partitions, and the closer $\text{RI}$ is to 0, the less similar they are.
+
+In our simulated dataset, there is little doubt that there are 2 clusters, and that they correspond almost exactly with the "groups" that are defined in the table. Let's put numbers on this observation with the following. Note that we could use Rand Index to compare the results of two clustering methods, say $k$-means with hierarchical clustering.
+
+::: {.panel-tabset group="day5"}
+### R
+
+```{r}
+#| label: r rand
+fossil::rand.index(res_kmeans$cluster, as.numeric(factor(dat$group)))
+```
+
+### Python
+
+```{python}
+#| label: python rand
+ri = rand_score(kmeans.labels_, dat['group'])
+print("Rand Index:", ri)
+```
+:::
+
+# Conclusion
+
+We saw a few methods to perform unsupervised multivariate analysis on a multi-dimensional quantitative dataset. To navigate these methods, I proposed during class a mind-map of multivariate methods, that works it way from the question that we ask, up to the selection of a method. It's a tool for you to use in a future: create your own map, and navigate it how you prefer.

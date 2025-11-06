@@ -49,3 +49,9 @@
 .Rproj.user
 *.Rproj
 .Rhistory
+notebooks/Courses/day5.pptx
+notebooks/Courses/day5_cache/
+notebooks/Courses/day5_files/
+notebooks/Courses/day5.html
+notebooks/Courses/slides*
+
